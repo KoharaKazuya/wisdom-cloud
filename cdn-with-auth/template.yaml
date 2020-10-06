@@ -496,6 +496,11 @@ Outputs:
     Value: !Ref S3Bucket
     Export:
       Name: !Sub "${AWS::StackName}-S3Bucket"
+  OAIS3CanonicalUser:
+    Description: The canonical user name for S3 Bucket Policy
+    Value: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
+    Export:
+      Name: !Sub "${AWS::StackName}-OAIS3CanonicalUser"
   WebsiteUrl:
     Description: URL of the CloudFront distribution that serves your SPA from S3
     Value: !Sub "https://${CloudFrontDistribution.DomainName}"
