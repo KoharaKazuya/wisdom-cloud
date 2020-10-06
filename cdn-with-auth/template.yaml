@@ -26,7 +26,7 @@ Parameters:
     Default: ""
   CookieSettings:
     Type: String
-    Description: The settings for the cookies holding e.g. the JWT's. To be provided as a JSON object, mapping cookie type to setting. Provide the setting for the particular cookie type as a string, e.g. "Path=/; Secure; HttpOnly; Max-Age=1800; SameSite=Lax". If left to null, a default setting will be used.
+    Description: The settings for the cookies holding e.g. the JWT's. To be provided as a JSON object, mapping cookie type to setting. Provide the setting for the particular cookie type as a string, e.g. "Path=/; Secure; HttpOnly; Max-Age=1800; SameSite=Lax". If left to null, a default setting will be used that should be suitable given the value of "EnableSPAMode" parameter.
     Default: >-
       {
         "idToken": null,
@@ -50,9 +50,16 @@ Parameters:
         "X-Frame-Options": "DENY",
         "X-Content-Type-Options": "nosniff"
       }
+  EnableSPAMode:
+    Type: String
+    Description: Set to 'false' to disable SPA-specific features (i.e. when deploying a static site that won't interact with logout/refresh)
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
   CookieCompatibility:
     Type: String
-    Description: "Specify whether naming of cookies should be compatible with AWS Amplify (default) or Amazon Elasticsearch Service."
+    Description: "Specify whether naming of cookies should be compatible with AWS Amplify (default) or Amazon Elasticsearch Service. In case of the latter, turn off SPA mode too: set parameter EnableSPAMode to false"
     Default: "amplify"
     AllowedValues:
       - "amplify"
@@ -90,6 +97,8 @@ Parameters:
       - "debug"
 
 Conditions:
+  SPAMode: !Equals [!Ref EnableSPAMode, "true"]
+  StaticSiteMode: !Equals [!Ref EnableSPAMode, "false"]
   UpdateUserPoolClient:
     !Not [!Equals [!Join ["", !Ref AlternateDomainNames], ""]]
 
@@ -214,7 +223,12 @@ Resources:
             CustomOriginConfig:
               OriginProtocolPolicy: match-viewer
         CustomErrorResponses:
-          - !Ref AWS::NoValue
+          - !If
+            - SPAMode # In SPA mode, 404's from S3 should return index.html, to enable SPA routing
+            - ErrorCode: 404
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+            - !Ref AWS::NoValue
 
   CloudFrontOriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
@@ -272,6 +286,7 @@ Resources:
 
   ClientSecretRetrieval:
     Type: Custom::ClientSecretRetrieval
+    Condition: StaticSiteMode
     Properties:
       ServiceToken: !GetAtt ClientSecretRetrievalHandler.Arn
       UserPoolArn: !Ref UserPoolArn
@@ -279,6 +294,7 @@ Resources:
 
   ClientSecretRetrievalHandler:
     Type: AWS::Serverless::Function
+    Condition: StaticSiteMode
     Properties:
       CodeUri: src/cfn-custom-resources/client-secret-retrieval/
       Handler: index.handler
@@ -317,8 +333,14 @@ Resources:
               "cookieCompatibility": "${CookieCompatibility}",
               "additionalCookies": ${AdditionalCookies}
             }
-          - Mode: "staticSiteMode"
-            ClientSecret: !GetAtt ClientSecretRetrieval.ClientSecret
+          - Mode: !If
+              - SPAMode
+              - "spaMode"
+              - "staticSiteMode"
+            ClientSecret: !If
+              - StaticSiteMode
+              - !GetAtt ClientSecretRetrieval.ClientSecret
+              - ""
             UserPoolArn: !Ref UserPoolArn
             ClientId: !Ref UserPoolClientId
             OAuthScopesJsonArray: !Join
@@ -355,8 +377,14 @@ Resources:
               "cookieCompatibility": "${CookieCompatibility}",
               "additionalCookies": ${AdditionalCookies}
             }
-          - Mode: "staticSiteMode"
-            ClientSecret: !GetAtt ClientSecretRetrieval.ClientSecret
+          - Mode: !If
+              - SPAMode
+              - "spaMode"
+              - "staticSiteMode"
+            ClientSecret: !If
+              - StaticSiteMode
+              - !GetAtt ClientSecretRetrieval.ClientSecret
+              - ""
             UserPoolArn: !Ref UserPoolArn
             ClientId: !Ref UserPoolClientId
             OAuthScopesJsonArray: !Join
@@ -406,8 +434,14 @@ Resources:
               "cookieCompatibility": "${CookieCompatibility}",
               "additionalCookies": ${AdditionalCookies}
             }
-          - Mode: "staticSiteMode"
-            ClientSecret: !GetAtt ClientSecretRetrieval.ClientSecret
+          - Mode: !If
+              - SPAMode
+              - "spaMode"
+              - "staticSiteMode"
+            ClientSecret: !If
+              - StaticSiteMode
+              - !GetAtt ClientSecretRetrieval.ClientSecret
+              - ""
             UserPoolArn: !Ref UserPoolArn
             ClientId: !Ref UserPoolClientId
             OAuthScopesJsonArray: !Join
@@ -444,8 +478,14 @@ Resources:
               "cookieCompatibility": "${CookieCompatibility}",
               "additionalCookies": ${AdditionalCookies}
             }
-          - Mode: "staticSiteMode"
-            ClientSecret: !GetAtt ClientSecretRetrieval.ClientSecret
+          - Mode: !If
+              - SPAMode
+              - "spaMode"
+              - "staticSiteMode"
+            ClientSecret: !If
+              - StaticSiteMode
+              - !GetAtt ClientSecretRetrieval.ClientSecret
+              - ""
             UserPoolArn: !Ref UserPoolArn
             ClientId: !Ref UserPoolClientId
             OAuthScopesJsonArray: !Join
@@ -512,7 +552,8 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-CloudFrontDistribution"
   ClientSecret:
-    Description: The client secret associated with the User Pool Client.
+    Description: The client secret associated with the User Pool Client. This will be empty in SPA mode.
+    Condition: StaticSiteMode
     Value: !GetAtt ClientSecretRetrieval.ClientSecret
     Export:
       Name: !Sub "${AWS::StackName}-ClientSecret"
