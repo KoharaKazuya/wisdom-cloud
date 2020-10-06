@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  an example stack that can be combined with cdn-with-auth
+
+Parameters:
+  EmailAddress:
+    Type: String
+    Description: The email address of the user that will be created in the Cognito User Pool. Leave empty to skip user creation.
+    Default: ""
+  OAuthScopes:
+    Type: CommaDelimitedList
+    Description: The OAuth scopes to request the User Pool to add to the access token JWT
+    Default: "phone, email, profile, openid, aws.cognito.signin.user.admin"
+  EnableSPAMode:
+    Type: String
+    Description: Set to 'false' to disable SPA-specific features (i.e. when deploying a static site that won't interact with logout/refresh)
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+
+Conditions:
+  CreateUser:
+    !Not [!Equals [!Ref EmailAddress, ""]]
+  StaticSiteMode: !Equals [!Ref EnableSPAMode, "false"]
+
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      UserPoolName: !Ref AWS::StackName
+      UsernameAttributes:
+        - email
+
+  User:
+    Type: AWS::Cognito::UserPoolUser
+    Condition: CreateUser
+    Properties:
+      Username: !Ref EmailAddress
+      UserPoolId: !Ref UserPool
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      PreventUserExistenceErrors: ENABLED
+      GenerateSecret: !If
+        - StaticSiteMode
+        - true
+        - false
+      AllowedOAuthScopes: !Ref OAuthScopes
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - https://example.com/will-be-replaced
+      LogoutURLs:
+        - https://example.com/will-be-replaced
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub
+        - "auth-${StackIdSuffix}"
+        - StackIdSuffix: !Select
+            - 2
+            - !Split
+              - "/"
+              - !Ref AWS::StackId
+      UserPoolId: !Ref UserPool
+
+Outputs:
+  UserPoolId:
+    Description: The ID of the Cognito User Pool
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub "${AWS::StackName}-UserPoolId"
+  ClientId:
+    Description: Client ID to use to interact with the User Pool
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub "${AWS::StackName}-ClientId"

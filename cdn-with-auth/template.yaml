@@ -99,8 +99,6 @@ Parameters:
 Conditions:
   SPAMode: !Equals [!Ref EnableSPAMode, "true"]
   StaticSiteMode: !Equals [!Ref EnableSPAMode, "false"]
-  UpdateUserPoolClient:
-    !Not [!Equals [!Join ["", !Ref AlternateDomainNames], ""]]
 
 Globals:
   Function:
@@ -258,7 +256,6 @@ Resources:
 
   UserPoolClientUpdate:
     Type: Custom::UserPoolClientUpdate
-    Condition: UpdateUserPoolClient
     Properties:
       ServiceToken: !GetAtt UserPoolClientUpdateHandler.Arn
       UserPoolArn: !Ref UserPoolArn
@@ -559,13 +556,11 @@ Outputs:
       Name: !Sub "${AWS::StackName}-ClientSecret"
   RedirectUrisSignIn:
     Description: The URI(s) that will handle the redirect from Cognito after successfull sign-in
-    Condition: UpdateUserPoolClient
     Value: !GetAtt UserPoolClientUpdate.RedirectUrisSignIn
     Export:
       Name: !Sub "${AWS::StackName}-RedirectUrisSignIn"
   RedirectUrisSignOut:
     Description: The URI(s) that will handle the redirect from Cognito after successfull sign-out
-    Condition: UpdateUserPoolClient
     Value: !GetAtt UserPoolClientUpdate.RedirectUrisSignOut
     Export:
       Name: !Sub "${AWS::StackName}-RedirectUrisSignOut"

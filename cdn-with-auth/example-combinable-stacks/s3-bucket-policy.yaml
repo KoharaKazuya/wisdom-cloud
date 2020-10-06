@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  an example stack that can be combined with cdn-with-auth
+
+Parameters:
+  S3BucketArn:
+    Type: String
+    Description: "Specify the ARN of S3 bucket."
+    Default: ""
+  OAIS3CanonicalUser:
+    Type: String
+    Description: The canonical user ID of CloudFront Origin Access Identity
+    Default: ""
+
+Resources:
+  CloudfrontBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Select
+        - 5
+        - !Split
+          - ":"
+          - !Ref S3BucketArn
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "s3:GetObject"
+            Effect: "Allow"
+            Resource: !Join ["/", [!Ref S3BucketArn, "*"]]
+            Principal:
+              CanonicalUser: !Ref OAIS3CanonicalUser
+          - Action:
+              - "s3:ListBucket"
+            Effect: "Allow"
+            Resource: !Ref S3BucketArn
+            Principal:
+              CanonicalUser: !Ref OAIS3CanonicalUser
