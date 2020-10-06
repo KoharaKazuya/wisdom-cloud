@@ -1,8 +1,4 @@
 {
-  "name": "cloudfront-authorization-at-edge",
-  "version": "1.0.0",
-  "description": "Protect downloads of your content hosted on CloudFront with Cognito authentication using Lambda@Edge",
-  "main": "index.js",
   "scripts": {
     "test": "echo \"Sorry, there aren't any tests\"; exit 1",
     "tsc": "tsc -b",
@@ -12,8 +8,6 @@
     "update-dependencies": "for DIR in . $(ls -d src/cfn-custom-resources/*) $(ls -d src/lambda-edge/*); do [ ! -f ${DIR}/package.json ] || (cd ${DIR} && echo \"Updating ${DIR} ...\" && rm -rf node_modules package-lock.json && npm update --dev); done; npm i",
     "postinstall": "for DIR in $(ls -d src/cfn-custom-resources/*) $(ls -d src/lambda-edge/*); do [ ! -f ${DIR}/package.json ] || (cd ${DIR} && echo \"Updating ${DIR} ...\" && npm install --ignore-scripts); done"
   },
-  "keywords": [],
-  "author": "",
   "devDependencies": {
     "@types/adm-zip": "^0.4.33",
     "@types/aws-lambda": "^8.10.61",
