@@ -1,40 +1,9 @@
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-# SPDX-License-Identifier: MIT-0
-
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
   Protect downloads of your content hosted on CloudFront with Cognito authentication using Lambda@Edge
-Metadata:
-  AWS::ServerlessRepo::Application:
-    Name: cloudfront-authorization-at-edge
-    Description: >
-      Protect downloads of your content hosted on CloudFront with Cognito authentication using Lambda@Edge.
-      Includes: S3 Bucket w. sample SPA, Cognito User Pool with hosted UI set up, Lambda@Edge functions to validate JWT's and handle OAuth2 redirects.
-    Author: AWS Samples
-    SpdxLicenseId: MIT-0
-    LicenseUrl: LICENSE
-    ReadmeUrl: SERVERLESS-REPO.md
-    Labels:
-      [
-        "cognito",
-        "lambda@edge",
-        "cloudfront",
-        "s3",
-        "react",
-        "angular",
-        "vue",
-        "amplify",
-      ]
-    HomePageUrl: https://github.com/aws-samples/cloudfront-authorization-at-edge
-    SemanticVersion: 2.0.1
-    SourceCodeUrl: https://github.com/aws-samples/cloudfront-authorization-at-edge
 
 Parameters:
-  EmailAddress:
-    Type: String
-    Description: The email address of the user that will be created in the Cognito User Pool. Leave empty to skip user creation.
-    Default: ""
   RedirectPathSignIn:
     Type: String
     Description: The URL path that should handle the redirect from Cognito after sign-in
@@ -57,7 +26,7 @@ Parameters:
     Default: ""
   CookieSettings:
     Type: String
-    Description: The settings for the cookies holding e.g. the JWT's. To be provided as a JSON object, mapping cookie type to setting. Provide the setting for the particular cookie type as a string, e.g. "Path=/; Secure; HttpOnly; Max-Age=1800; SameSite=Lax". If left to null, a default setting will be used that should be suitable given the value of "EnableSPAMode" parameter.
+    Description: The settings for the cookies holding e.g. the JWT's. To be provided as a JSON object, mapping cookie type to setting. Provide the setting for the particular cookie type as a string, e.g. "Path=/; Secure; HttpOnly; Max-Age=1800; SameSite=Lax". If left to null, a default setting will be used.
     Default: >-
       {
         "idToken": null,
@@ -81,23 +50,9 @@ Parameters:
         "X-Frame-Options": "DENY",
         "X-Content-Type-Options": "nosniff"
       }
-  EnableSPAMode:
-    Type: String
-    Description: Set to 'false' to disable SPA-specific features (i.e. when deploying a static site that won't interact with logout/refresh)
-    Default: "true"
-    AllowedValues:
-      - "true"
-      - "false"
-  CreateCloudFrontDistribution:
-    Type: String
-    Description: Set to 'false' to skip the creation of a CloudFront distribution and associated resources, such as the private S3 bucket and the sample React app. This may be of use to you, if you just want to create the Lambda@Edge functions to use with your own CloudFront distribution.
-    Default: "true"
-    AllowedValues:
-      - "true"
-      - "false"
   CookieCompatibility:
     Type: String
-    Description: "Specify whether naming of cookies should be compatible with AWS Amplify (default) or Amazon Elasticsearch Service. In case of the latter, turn off SPA mode too: set parameter EnableSPAMode to false"
+    Description: "Specify whether naming of cookies should be compatible with AWS Amplify (default) or Amazon Elasticsearch Service."
     Default: "amplify"
     AllowedValues:
       - "amplify"
@@ -115,6 +70,10 @@ Parameters:
     Type: String
     Description: "Specify the ID of an existing user pool client to use that one instead of creating a new one. If specified, then UserPoolArn must also be specified. Note: new callback URL's will be added to the pre-existing user pool client"
     Default: ""
+  S3Bucket:
+    Type: String
+    Description: "Specify the name of S3 bucket. This is used as a domain \"<name>.s3.amazonaws.com\"."
+    Default: ""
   Version:
     Type: String
     Description: "Use for development: putting in a new version forces redeployment of Lambda@Edge functions"
@@ -131,36 +90,14 @@ Parameters:
       - "debug"
 
 Conditions:
-  CreateUser: !And
-    - !Not [!Equals [!Ref EmailAddress, ""]]
-    - !Equals [!Ref UserPoolArn, ""]
-    - !Equals [!Ref UserPoolClientId, ""]
-  CreateCloudFrontDistribution:
-    !Equals [!Ref CreateCloudFrontDistribution, "true"]
-  SPAMode: !Equals [!Ref EnableSPAMode, "true"]
-  StaticSiteMode: !Equals [!Ref EnableSPAMode, "false"]
-  CreateCloudFrontDistributionStaticSiteMode: !And
-    - !Equals [!Ref EnableSPAMode, "false"]
-    - !Equals [!Ref CreateCloudFrontDistribution, "true"]
-  CreateCloudFrontDistributionSpaMode: !And
-    - !Equals [!Ref EnableSPAMode, "true"]
-    - !Equals [!Ref CreateCloudFrontDistribution, "true"]
-  CreateUserPoolAndClient: !Equals [!Ref UserPoolArn, ""]
-  UpdateUserPoolClient: !Or
-    - !Equals [!Ref CreateCloudFrontDistribution, "true"]
-    - !Not [!Equals [!Join ["", !Ref AlternateDomainNames], ""]]
+  UpdateUserPoolClient:
+    !Not [!Equals [!Join ["", !Ref AlternateDomainNames], ""]]
 
 Globals:
   Function:
     Timeout: 60
 
 Resources:
-  S3Bucket:
-    Type: AWS::S3::Bucket
-    Condition: CreateCloudFrontDistribution
-    Properties:
-      AccessControl: Private
-
   CheckAuthHandler:
     Type: AWS::Serverless::Function
     Properties:
@@ -224,7 +161,6 @@ Resources:
 
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
-    Condition: CreateCloudFrontDistribution
     Properties:
       DistributionConfig:
         CacheBehaviors:
@@ -278,100 +214,19 @@ Resources:
             CustomOriginConfig:
               OriginProtocolPolicy: match-viewer
         CustomErrorResponses:
-          - !If
-            - SPAMode # In SPA mode, 404's from S3 should return index.html, to enable SPA routing
-            - ErrorCode: 404
-              ResponseCode: 200
-              ResponsePagePath: /index.html
-            - !Ref AWS::NoValue
+          - !Ref AWS::NoValue
 
   CloudFrontOriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
-    Condition: CreateCloudFrontDistribution
     Properties:
       CloudFrontOriginAccessIdentityConfig:
         Comment: "CloudFront OAI"
-
-  CloudfrontBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Condition: CreateCloudFrontDistribution
-    Properties:
-      Bucket: !Ref S3Bucket
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Action:
-              - "s3:GetObject"
-            Effect: "Allow"
-            Resource: !Join ["/", [!GetAtt S3Bucket.Arn, "*"]]
-            Principal:
-              CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
-          - Action:
-              - "s3:ListBucket"
-            Effect: "Allow"
-            Resource: !GetAtt S3Bucket.Arn
-            Principal:
-              CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
-
-  UserPool:
-    Type: AWS::Cognito::UserPool
-    Condition: CreateUserPoolAndClient
-    Properties:
-      AdminCreateUserConfig:
-        AllowAdminCreateUserOnly: true
-      UserPoolName: !Ref AWS::StackName
-      UsernameAttributes:
-        - email
-
-  User:
-    Type: AWS::Cognito::UserPoolUser
-    Condition: CreateUser
-    Properties:
-      Username: !Ref EmailAddress
-      UserPoolId: !Ref UserPool
-
-  UserPoolClient:
-    Type: AWS::Cognito::UserPoolClient
-    Condition: CreateUserPoolAndClient
-    Properties:
-      UserPoolId: !Ref UserPool
-      PreventUserExistenceErrors: ENABLED
-      GenerateSecret: !If
-        - StaticSiteMode
-        - true
-        - false
-      AllowedOAuthScopes: !Ref OAuthScopes
-      AllowedOAuthFlowsUserPoolClient: true
-      AllowedOAuthFlows:
-        - code
-      SupportedIdentityProviders:
-        - COGNITO
-      CallbackURLs:
-        - https://example.com/will-be-replaced
-      LogoutURLs:
-        - https://example.com/will-be-replaced
-
-  UserPoolDomain:
-    Type: AWS::Cognito::UserPoolDomain
-    Condition: CreateUserPoolAndClient
-    Properties:
-      Domain: !Sub
-        - "auth-${StackIdSuffix}"
-        - StackIdSuffix: !Select
-            - 2
-            - !Split
-              - "/"
-              - !Ref AWS::StackId
-      UserPoolId: !Ref UserPool
 
   UserPoolDomainLookup:
     Type: Custom::UserPoolDomainLookup
     Properties:
       ServiceToken: !GetAtt UserPoolDomainLookupHandler.Arn
-      UserPoolArn: !If
-        - CreateUserPoolAndClient
-        - !GetAtt UserPool.Arn
-        - !Ref UserPoolArn
+      UserPoolArn: !Ref UserPoolArn
 
   UserPoolDomainLookupHandler:
     Type: AWS::Serverless::Function
@@ -385,28 +240,16 @@ Resources:
             - Effect: Allow
               Action:
                 - cognito-idp:DescribeUserPool
-              Resource: !If
-                - CreateUserPoolAndClient
-                - !GetAtt UserPool.Arn
-                - !Ref UserPoolArn
+              Resource: !Ref UserPoolArn
 
   UserPoolClientUpdate:
     Type: Custom::UserPoolClientUpdate
     Condition: UpdateUserPoolClient
     Properties:
       ServiceToken: !GetAtt UserPoolClientUpdateHandler.Arn
-      UserPoolArn: !If
-        - CreateUserPoolAndClient
-        - !GetAtt UserPool.Arn
-        - !Ref UserPoolArn
-      UserPoolClientId: !If
-        - CreateUserPoolAndClient
-        - !Ref UserPoolClient
-        - !Ref UserPoolClientId
-      CloudFrontDistributionDomainName: !If
-        - CreateCloudFrontDistribution
-        - !GetAtt CloudFrontDistribution.DomainName
-        - ""
+      UserPoolArn: !Ref UserPoolArn
+      UserPoolClientId: !Ref UserPoolClientId
+      CloudFrontDistributionDomainName: !GetAtt CloudFrontDistribution.DomainName
       RedirectPathSignIn: !Ref RedirectPathSignIn
       RedirectPathSignOut: !Ref RedirectPathSignOut
       AlternateDomainNames: !Ref AlternateDomainNames
@@ -429,21 +272,13 @@ Resources:
 
   ClientSecretRetrieval:
     Type: Custom::ClientSecretRetrieval
-    Condition: StaticSiteMode
     Properties:
       ServiceToken: !GetAtt ClientSecretRetrievalHandler.Arn
-      UserPoolArn: !If
-        - CreateUserPoolAndClient
-        - !GetAtt UserPool.Arn
-        - !Ref UserPoolArn
-      UserPoolClientId: !If
-        - CreateUserPoolAndClient
-        - !Ref UserPoolClient
-        - !Ref UserPoolClientId
+      UserPoolArn: !Ref UserPoolArn
+      UserPoolClientId: !Ref UserPoolClientId
 
   ClientSecretRetrievalHandler:
     Type: AWS::Serverless::Function
-    Condition: StaticSiteMode
     Properties:
       CodeUri: src/cfn-custom-resources/client-secret-retrieval/
       Handler: index.handler
@@ -454,89 +289,7 @@ Resources:
             - Effect: Allow
               Action:
                 - cognito-idp:DescribeUserPoolClient
-              Resource: !If
-                - CreateUserPoolAndClient
-                - !GetAtt UserPool.Arn
-                - !Ref UserPoolArn
-
-  StaticSite:
-    Type: Custom::StaticSite
-    Condition: CreateCloudFrontDistributionStaticSiteMode
-    Properties:
-      ServiceToken: !GetAtt StaticSiteHandler.Arn
-      BucketName: !Ref S3Bucket
-
-  StaticSiteHandler:
-    Type: AWS::Serverless::Function
-    Condition: CreateCloudFrontDistributionStaticSiteMode
-    Properties:
-      CodeUri: src/cfn-custom-resources/static-site/
-      Handler: bundle.handler
-      Runtime: nodejs12.x
-      Timeout: 180
-      MemorySize: 2048
-      Policies:
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - s3:ListBucket
-              Resource:
-                - !GetAtt S3Bucket.Arn
-            - Effect: Allow
-              Action:
-                - s3:DeleteObject
-                - s3:PutObject
-              Resource:
-                - !GetAtt S3Bucket.Arn
-                - !Join ["/", [!GetAtt S3Bucket.Arn, "*"]]
-
-  ReactApp:
-    Type: Custom::ReactApp
-    Condition: CreateCloudFrontDistributionSpaMode
-    Properties:
-      ServiceToken: !GetAtt ReactAppHandler.Arn
-      BucketName: !Ref S3Bucket
-      UserPoolArn: !If
-        - CreateUserPoolAndClient
-        - !GetAtt UserPool.Arn
-        - !Ref UserPoolArn
-      ClientId: !If
-        - CreateUserPoolAndClient
-        - !Ref UserPoolClient
-        - !Ref UserPoolClientId
-      CognitoAuthDomain: !Ref UserPoolDomainLookup
-      RedirectPathSignIn: !Ref RedirectPathSignIn
-      RedirectPathSignOut: !Ref RedirectPathSignOut
-      OAuthScopes: !Join
-        - ","
-        - !Ref OAuthScopes
-      SignOutUrl: !Ref SignOutUrl
-
-  ReactAppHandler:
-    Type: AWS::Serverless::Function
-    Condition: CreateCloudFrontDistributionSpaMode
-    Properties:
-      CodeUri: src/cfn-custom-resources/react-app/
-      Handler: bundle.handler
-      Runtime: nodejs12.x
-      Timeout: 180
-      MemorySize: 2048
-      Policies:
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - s3:ListBucket
-              Resource:
-                - !GetAtt S3Bucket.Arn
-            - Effect: Allow
-              Action:
-                - s3:DeleteObject
-                - s3:PutObject
-              Resource:
-                - !GetAtt S3Bucket.Arn
-                - !Join ["/", [!GetAtt S3Bucket.Arn, "*"]]
+              Resource: !Ref UserPoolArn
 
   ParseAuthHandlerCodeUpdate:
     Type: Custom::LambdaCodeUpdate
@@ -564,22 +317,10 @@ Resources:
               "cookieCompatibility": "${CookieCompatibility}",
               "additionalCookies": ${AdditionalCookies}
             }
-          - Mode: !If
-              - SPAMode
-              - "spaMode"
-              - "staticSiteMode"
-            ClientSecret: !If
-              - StaticSiteMode
-              - !GetAtt ClientSecretRetrieval.ClientSecret
-              - ""
-            UserPoolArn: !If
-              - CreateUserPoolAndClient
-              - !GetAtt UserPool.Arn
-              - !Ref UserPoolArn
-            ClientId: !If
-              - CreateUserPoolAndClient
-              - !Ref UserPoolClient
-              - !Ref UserPoolClientId
+          - Mode: "staticSiteMode"
+            ClientSecret: !GetAtt ClientSecretRetrieval.ClientSecret
+            UserPoolArn: !Ref UserPoolArn
+            ClientId: !Ref UserPoolClientId
             OAuthScopesJsonArray: !Join
               - ""
               - - '["'
@@ -614,22 +355,10 @@ Resources:
               "cookieCompatibility": "${CookieCompatibility}",
               "additionalCookies": ${AdditionalCookies}
             }
-          - Mode: !If
-              - SPAMode
-              - "spaMode"
-              - "staticSiteMode"
-            ClientSecret: !If
-              - StaticSiteMode
-              - !GetAtt ClientSecretRetrieval.ClientSecret
-              - ""
-            UserPoolArn: !If
-              - CreateUserPoolAndClient
-              - !GetAtt UserPool.Arn
-              - !Ref UserPoolArn
-            ClientId: !If
-              - CreateUserPoolAndClient
-              - !Ref UserPoolClient
-              - !Ref UserPoolClientId
+          - Mode: "staticSiteMode"
+            ClientSecret: !GetAtt ClientSecretRetrieval.ClientSecret
+            UserPoolArn: !Ref UserPoolArn
+            ClientId: !Ref UserPoolClientId
             OAuthScopesJsonArray: !Join
               - ""
               - - '["'
@@ -677,22 +406,10 @@ Resources:
               "cookieCompatibility": "${CookieCompatibility}",
               "additionalCookies": ${AdditionalCookies}
             }
-          - Mode: !If
-              - SPAMode
-              - "spaMode"
-              - "staticSiteMode"
-            ClientSecret: !If
-              - StaticSiteMode
-              - !GetAtt ClientSecretRetrieval.ClientSecret
-              - ""
-            UserPoolArn: !If
-              - CreateUserPoolAndClient
-              - !GetAtt UserPool.Arn
-              - !Ref UserPoolArn
-            ClientId: !If
-              - CreateUserPoolAndClient
-              - !Ref UserPoolClient
-              - !Ref UserPoolClientId
+          - Mode: "staticSiteMode"
+            ClientSecret: !GetAtt ClientSecretRetrieval.ClientSecret
+            UserPoolArn: !Ref UserPoolArn
+            ClientId: !Ref UserPoolClientId
             OAuthScopesJsonArray: !Join
               - ""
               - - '["'
@@ -727,22 +444,10 @@ Resources:
               "cookieCompatibility": "${CookieCompatibility}",
               "additionalCookies": ${AdditionalCookies}
             }
-          - Mode: !If
-              - SPAMode
-              - "spaMode"
-              - "staticSiteMode"
-            ClientSecret: !If
-              - StaticSiteMode
-              - !GetAtt ClientSecretRetrieval.ClientSecret
-              - ""
-            UserPoolArn: !If
-              - CreateUserPoolAndClient
-              - !GetAtt UserPool.Arn
-              - !Ref UserPoolArn
-            ClientId: !If
-              - CreateUserPoolAndClient
-              - !Ref UserPoolClient
-              - !Ref UserPoolClientId
+          - Mode: "staticSiteMode"
+            ClientSecret: !GetAtt ClientSecretRetrieval.ClientSecret
+            UserPoolArn: !Ref UserPoolArn
+            ClientId: !Ref UserPoolClientId
             OAuthScopesJsonArray: !Join
               - ""
               - - '["'
@@ -788,46 +493,24 @@ Resources:
 Outputs:
   S3Bucket:
     Description: The S3 Bucket where the SPA (React, Angular, Vue, ...) is uploaded to
-    Condition: CreateCloudFrontDistribution
     Value: !Ref S3Bucket
     Export:
       Name: !Sub "${AWS::StackName}-S3Bucket"
   WebsiteUrl:
     Description: URL of the CloudFront distribution that serves your SPA from S3
-    Condition: CreateCloudFrontDistribution
     Value: !Sub "https://${CloudFrontDistribution.DomainName}"
     Export:
       Name: !Sub "${AWS::StackName}-WebsiteUrl"
   CloudFrontDistribution:
     Description: ID of the CloudFront distribution that serves your SPA from S3
-    Condition: CreateCloudFrontDistribution
     Value: !Ref CloudFrontDistribution
     Export:
       Name: !Sub "${AWS::StackName}-CloudFrontDistribution"
-  UserPoolId:
-    Description: The ID of the Cognito User Pool
-    Condition: CreateUserPoolAndClient
-    Value: !Ref UserPool
-    Export:
-      Name: !Sub "${AWS::StackName}-UserPoolId"
-  ClientId:
-    Description: Client ID to use to interact with the User Pool
-    Condition: CreateUserPoolAndClient
-    Value: !Ref UserPoolClient
-    Export:
-      Name: !Sub "${AWS::StackName}-ClientId"
   ClientSecret:
-    Description: The client secret associated with the User Pool Client. This will be empty in SPA mode.
-    Condition: StaticSiteMode
+    Description: The client secret associated with the User Pool Client.
     Value: !GetAtt ClientSecretRetrieval.ClientSecret
     Export:
       Name: !Sub "${AWS::StackName}-ClientSecret"
-  CognitoAuthDomain:
-    Description: The domain where the Cognito Hosted UI is served
-    Condition: CreateUserPoolAndClient
-    Value: !Ref UserPoolDomainLookup
-    Export:
-      Name: !Sub "${AWS::StackName}-CognitoAuthDomain"
   RedirectUrisSignIn:
     Description: The URI(s) that will handle the redirect from Cognito after successfull sign-in
     Condition: UpdateUserPoolClient

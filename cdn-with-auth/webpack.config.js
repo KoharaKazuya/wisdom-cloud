@@ -13,8 +13,6 @@ module.exports = {
     'src/lambda-edge/refresh-auth/bundle': path.resolve(__dirname, './src/lambda-edge/refresh-auth/index.ts'),
     'src/lambda-edge/http-headers/bundle': path.resolve(__dirname, './src/lambda-edge/http-headers/index.ts'),
     'src/lambda-edge/sign-out/bundle': path.resolve(__dirname, './src/lambda-edge/sign-out/index.ts'),
-    'src/cfn-custom-resources/react-app/bundle': path.resolve(__dirname, './src/cfn-custom-resources/react-app/index.ts'),
-    'src/cfn-custom-resources/static-site/bundle': path.resolve(__dirname, './src/cfn-custom-resources/static-site/index.ts'),
   },
   module: {
     rules: [

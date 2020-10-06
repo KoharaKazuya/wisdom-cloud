@@ -16,8 +16,5 @@
   },
   "include": [ /* Specify files to transpile explicitly because other ts files in this project are transpiled directly by webpack */
     "src/cfn-custom-resources/*/*",
-  ],
-  "exclude": [
-    "src/cfn-custom-resources/react-app/*",
   ]
 }
