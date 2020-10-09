@@ -157,15 +157,14 @@ Resources:
       Role: !GetAtt LambdaEdgeExecutionRole.Arn
       Timeout: 5
 
-  StripApiPathPrefixHandler:
+  WisdomHttpApiHandler:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: src/lambda-edge/strip-api-path-prefix/
+      CodeUri: src/lambda-edge/wisdom-http-api/
       Handler: bundle.handler
       Runtime: nodejs12.x
       Role: !GetAtt LambdaEdgeExecutionRole.Arn
       Timeout: 5
-      AutoPublishAlias: live
 
   LambdaEdgeExecutionRole:
     Type: AWS::IAM::Role
@@ -219,10 +218,19 @@ Resources:
             Compress: true
             LambdaFunctionAssociations:
               - EventType: origin-request
-                LambdaFunctionARN: !Ref StripApiPathPrefixHandler.Version
+                LambdaFunctionARN: !GetAtt WisdomHttpApiHandlerCodeUpdate.FunctionArn
             TargetOriginId: wisdom-http-api
             ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - PATCH
+              - POST
+              - DELETE
             CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
+            OriginRequestPolicyId: !Ref CloudFrontOriginRequestPolicyWisdomHttpApi
         DefaultCacheBehavior:
           Compress: true
           ForwardedValues:
@@ -265,6 +273,21 @@ Resources:
     Properties:
       CloudFrontOriginAccessIdentityConfig:
         Comment: "CloudFront OAI"
+
+  CloudFrontOriginRequestPolicyWisdomHttpApi:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: WisdomHttpApi-ApiGatewayBackend
+        Comment: Policy for wisdom-http-api's API Gateway backend
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers:
+            - wisdom-authed-email
+        CookiesConfig:
+          CookieBehavior: all
+        QueryStringsConfig:
+          QueryStringBehavior: all
 
   UserPoolDomainLookup:
     Type: Custom::UserPoolDomainLookup
@@ -525,6 +548,50 @@ Resources:
                   - !Ref OAuthScopes
                 - '"]'
 
+  WisdomHttpApiHandlerCodeUpdate:
+    Type: Custom::LambdaCodeUpdate
+    Properties:
+      ServiceToken: !GetAtt LambdaCodeUpdateHandler.Arn
+      LambdaFunction: !GetAtt WisdomHttpApiHandler.Arn
+      Version: !Ref Version
+      Configuration:
+        Fn::Sub:
+          - >
+            {
+              "userPoolArn": "${UserPoolArn}",
+              "clientId": "${ClientId}",
+              "clientSecret": "${ClientSecret}",
+              "oauthScopes": ${OAuthScopesJsonArray},
+              "cognitoAuthDomain": "${UserPoolDomainLookup}",
+              "redirectPathSignIn": "${RedirectPathSignIn}",
+              "redirectPathSignOut": "${RedirectPathSignOut}",
+              "redirectPathAuthRefresh": "${RedirectPathAuthRefresh}",
+              "cookieSettings": ${CookieSettings},
+              "mode": "${Mode}",
+              "httpHeaders": ${HttpHeaders},
+              "logLevel": "${LogLevel}",
+              "nonceSigningSecret": "${NonceSigningSecret}",
+              "cookieCompatibility": "${CookieCompatibility}",
+              "additionalCookies": ${AdditionalCookies}
+            }
+          - Mode: !If
+              - SPAMode
+              - "spaMode"
+              - "staticSiteMode"
+            ClientSecret: !If
+              - StaticSiteMode
+              - !GetAtt ClientSecretRetrieval.ClientSecret
+              - ""
+            UserPoolArn: !Ref UserPoolArn
+            ClientId: !Ref UserPoolClientId
+            OAuthScopesJsonArray: !Join
+              - ""
+              - - '["'
+                - !Join
+                  - '", "'
+                  - !Ref OAuthScopes
+                - '"]'
+
   LambdaCodeUpdateHandler:
     Type: AWS::Serverless::Function
     Properties:
@@ -544,6 +611,7 @@ Resources:
                 - !GetAtt HttpHeadersHandler.Arn
                 - !GetAtt RefreshAuthHandler.Arn
                 - !GetAtt SignOutHandler.Arn
+                - !GetAtt WisdomHttpApiHandler.Arn
 
   NonceSigningSecret:
     Type: Custom::NonceSigningSecret

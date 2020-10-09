@@ -13,7 +13,7 @@ module.exports = {
     'src/lambda-edge/refresh-auth/bundle': path.resolve(__dirname, './src/lambda-edge/refresh-auth/index.ts'),
     'src/lambda-edge/http-headers/bundle': path.resolve(__dirname, './src/lambda-edge/http-headers/index.ts'),
     'src/lambda-edge/sign-out/bundle': path.resolve(__dirname, './src/lambda-edge/sign-out/index.ts'),
-    'src/lambda-edge/strip-api-path-prefix/bundle': path.resolve(__dirname, './src/lambda-edge/strip-api-path-prefix/index.ts'),
+    'src/lambda-edge/wisdom-http-api/bundle': path.resolve(__dirname, './src/lambda-edge/wisdom-http-api/index.ts'),
   },
   module: {
     rules: [
