@@ -81,6 +81,13 @@ Parameters:
     Type: String
     Description: "Specify the name of S3 bucket. This is used as a domain \"<name>.s3.amazonaws.com\"."
     Default: ""
+  ApiDomainName:
+    Type: String
+    Description: "Specify domain name of wisdom-http-api API Gateway"
+  ApiKey:
+    Type: String
+    NoEcho: true
+    Description: "Specify API Key to identify access from CloudFront to API Gateway"
   Version:
     Type: String
     Description: "Use for development: putting in a new version forces redeployment of Lambda@Edge functions"
@@ -150,6 +157,16 @@ Resources:
       Role: !GetAtt LambdaEdgeExecutionRole.Arn
       Timeout: 5
 
+  StripApiPathPrefixHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/lambda-edge/strip-api-path-prefix/
+      Handler: bundle.handler
+      Runtime: nodejs12.x
+      Role: !GetAtt LambdaEdgeExecutionRole.Arn
+      Timeout: 5
+      AutoPublishAlias: live
+
   LambdaEdgeExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -198,6 +215,14 @@ Resources:
                 LambdaFunctionARN: !GetAtt SignOutHandlerCodeUpdate.FunctionArn
             TargetOriginId: dummy-origin
             ViewerProtocolPolicy: redirect-to-https
+          - PathPattern: /api/*
+            Compress: true
+            LambdaFunctionAssociations:
+              - EventType: origin-request
+                LambdaFunctionARN: !Ref StripApiPathPrefixHandler.Version
+            TargetOriginId: wisdom-http-api
+            ViewerProtocolPolicy: redirect-to-https
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
         DefaultCacheBehavior:
           Compress: true
           ForwardedValues:
@@ -216,6 +241,13 @@ Resources:
             Id: protected-bucket
             S3OriginConfig:
               OriginAccessIdentity: !Sub "origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}"
+          - DomainName: !Ref ApiDomainName
+            Id: wisdom-http-api
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+            OriginCustomHeaders:
+              - HeaderName: x-api-key
+                HeaderValue: !Ref ApiKey
           - DomainName: will-never-be-reached.org
             Id: dummy-origin
             CustomOriginConfig:

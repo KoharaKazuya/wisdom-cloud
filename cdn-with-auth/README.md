@@ -27,6 +27,7 @@ AWS CloudFront + Lambda@Edge + Cognito の構成。
 3. AWS アカウントとその中にリソースを作るのに必要な権限
 4. SAM デプロイのために使う S3 Bucket
 5. Unix ライクなシェル (Windows は Linux Subsystem for Windows か Cygwin など)
+6. wisdom-http-api のデプロイと、そこから得られるドメイン名と API キー (CloudFront → API Gateway のアクセスのために使用する)
 
 **デプロイ**
 
