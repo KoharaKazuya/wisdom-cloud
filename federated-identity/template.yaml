@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Federate user identity by Cognito User Pool
+
+Parameters:
+  OAuthScopes:
+    Type: CommaDelimitedList
+    Description: The OAuth scopes to request the User Pool to add to the access token JWT
+    Default: "phone, email, profile, openid, aws.cognito.signin.user.admin"
+  IdpGoogleClientId:
+    Type: String
+    Description: "Google OAuth 2.0 client ID (README.md for details)"
+  IdpGoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: "Google OAuth 2.0 client secret (README.md for details)"
+
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      UserPoolName: !Ref AWS::StackName
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+
+  UserPoolIdentityProviderGoogle:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref IdpGoogleClientId
+        client_secret: !Ref IdpGoogleClientSecret
+        authorize_scopes: profile email openid
+      AttributeMapping:
+        username: sub
+        email: email
+        name: name
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      PreventUserExistenceErrors: ENABLED
+      GenerateSecret: true
+      AllowedOAuthScopes: !Ref OAuthScopes
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      SupportedIdentityProviders:
+        - !Ref UserPoolIdentityProviderGoogle
+      CallbackURLs:
+        - https://example.com/will-be-replaced
+      LogoutURLs:
+        - https://example.com/will-be-replaced
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub
+        - "auth-${StackIdSuffix}"
+        - StackIdSuffix: !Select
+            - 2
+            - !Split
+              - "/"
+              - !Ref AWS::StackId
+      UserPoolId: !Ref UserPool
+
+Outputs:
+  UserPoolId:
+    Description: The ID of the Cognito User Pool
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub "${AWS::StackName}-UserPoolId"
+  ClientId:
+    Description: Client ID to use to interact with the User Pool
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub "${AWS::StackName}-ClientId"

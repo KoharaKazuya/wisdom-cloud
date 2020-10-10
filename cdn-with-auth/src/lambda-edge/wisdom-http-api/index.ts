@@ -29,9 +29,11 @@ export const handler: CloudFrontRequestHandler = async (event) => {
     throw new Error("No ID token present in cookies");
   }
 
-  // origin request に wisdom-authed-email ヘッダーを付与
-  const { email } = decodeToken(idToken);
-  request.headers["wisdom-authed-email"] = [{ value: email }];
+  // origin request に wisdom-cognito-username ヘッダーを付与
+  const claim = decodeToken(idToken);
+  request.headers["wisdom-cognito-username"] = [
+    { value: claim["cognito:username"] },
+  ];
 
   // リクエスト URI から `/api` プレフィクスを削除
   request.uri = request.uri.replace(/^\/api/, "");

@@ -283,7 +283,7 @@ Resources:
         HeadersConfig:
           HeaderBehavior: whitelist
           Headers:
-            - wisdom-authed-email
+            - wisdom-cognito-username
         CookiesConfig:
           CookieBehavior: all
         QueryStringsConfig:
