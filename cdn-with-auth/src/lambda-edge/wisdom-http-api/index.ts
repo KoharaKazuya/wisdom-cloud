@@ -24,16 +24,14 @@ export const handler: CloudFrontRequestHandler = async (event) => {
   );
   CONFIG.logger.debug("Extracted cookies:\n", { idToken });
 
-  // If there's no ID token in your cookies then you are not signed in yet
-  if (!idToken) {
-    throw new Error("No ID token present in cookies");
-  }
+  // check-auth で検証済みなので無条件で信頼する
+  const claim = decodeToken(idToken!);
+  CONFIG.logger.debug("Extracted claim:\n", claim);
 
-  // origin request に wisdom-cognito-username ヘッダーを付与
-  const claim = decodeToken(idToken);
-  request.headers["wisdom-cognito-username"] = [
-    { value: claim["cognito:username"] },
-  ];
+  // origin request に wisdom-user-* ヘッダーを付与
+  // ヘッダー値に Non-Ascii な文字は使えないのでパーセントエンコードする
+  request.headers['wisdom-user-name'] = [{ value: encodeURI(claim.name) }];
+  request.headers['wisdom-user-email'] = [{ value: encodeURI(claim.email) }];
 
   // リクエスト URI から `/api` プレフィクスを削除
   request.uri = request.uri.replace(/^\/api/, "");
